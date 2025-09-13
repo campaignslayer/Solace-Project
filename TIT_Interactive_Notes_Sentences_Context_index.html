@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>TIT Interactive Notes — Sentence View</title>
+<style>
+:root{--bg:#0b0c10;--panel:#0f1316;--muted:#9aa3a6;--accent1:#00ffff;--accent2:#66fcf1;--accent3:#ff66ff;--cyan:#00ffff;--green:#00ff80;--magenta:#ff66ff;}
+body{font-family: "Courier New", monospace;background:var(--bg);color:#d7e6e6;margin:18px;}
+h1{color:var(--accent2);text-align:center;margin:4px 0;}
+h2.subtitle{color:var(--accent1);text-align:center;font-weight:400;margin:4px 0 12px 0;font-size:1rem;}
+.container{max-width:980px;margin:0 auto;}
+.controls{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:12px;}
+.left-controls{flex:1;min-width:260px;}
+.right-controls{display:flex;gap:8px;align-items:center;}
+textarea#notesInput{width:100%;min-height:160px;border-radius:8px;padding:12px;background:#0f1416;border:1px solid rgba(102,252,241,0.08);color:#e6f7f7;resize:vertical;}
+button,select,input[type="checkbox"]{background:#0f1416;color:#d7e6e6;border:1px solid rgba(102,252,241,0.06);padding:8px;border-radius:6px;}
+button.primary{background:linear-gradient(90deg,var(--accent1),var(--accent2));color:#021212;border:none;font-weight:700;}
+.controls-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.legend{text-align:center;margin:8px 0;color:var(--muted);font-size:0.95rem;}
+#results{margin-top:14px;}
+.sentence-card{background:linear-gradient(180deg,#0e1415,#0b0f10);padding:10px;border-left:4px solid rgba(102,252,241,0.12);border-radius:6px;margin-bottom:10px;transition:transform .2s ease,box-shadow .2s ease,opacity .25s;}
+.sentence-card:hover{transform:translateY(-3px);box-shadow:0 8px 20px rgba(0,0,0,0.6);}
+.sentence-main{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;}
+.sentence-text{flex:1;}
+.sentence-id{color:var(--muted);font-size:0.85rem;margin-bottom:6px;}
+.metrics{width:180px;flex-shrink:0;text-align:right;}
+.metric-bar{height:8px;border-radius:6px;margin:4px 0;transition:width .45s ease,opacity .3s;}
+.deltaI{background:linear-gradient(90deg,var(--cyan),var(--accent2));}
+.deltaP{background:linear-gradient(90deg,#00ff80,#66fcf1);}
+.deltaR{background:linear-gradient(90deg,var(--magenta),#ff99ff);}
+.context-sentence{font-style:italic;color:var(--muted);margin:4px 0 0 0;padding-left:6px;}
+.match-highlight{background:rgba(102,252,241,0.12);padding:2px 4px;border-radius:4px;}
+.controls small{color:var(--muted);display:block;margin-top:4px;}
+.toggle{display:flex;align-items:center;gap:6px;color:var(--muted);}
+.modal-backdrop{position:fixed;inset:0;background:rgba(2,6,8,0.6);display:flex;align-items:center;justify-content:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity .2s ease;}
+.modal-backdrop.show{opacity:1;pointer-events:auto;}
+.modal{background:#071012;padding:18px;border-radius:10px;max-width:780px;max-height:80vh;overflow:auto;border:1px solid rgba(102,252,241,0.08);box-shadow:0 20px 40px rgba(0,0,0,0.7);}
+.modal .close{float:right;background:transparent;border:none;color:var(--muted);font-size:18px;cursor:pointer;}
+.modal h3{color:var(--accent2);margin-top:4px;}
+.paragraph{margin:8px 0;line-height:1.45;color:#d7e6e6;}
+.footer{margin-top:18px;text-align:center;color:var(--muted);font-size:0.9rem;}
+.small-muted{color:var(--muted);font-size:0.9rem;margin-left:6px;}
+.empty-note{color:var(--muted);padding:16px;background:#071214;border-radius:8px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>✨ TIT Interactive Notes</h1>
+  <h2 class="subtitle">Transactional Information Theory (TIT) — sentence units & context</h2>
+
+  <div class="controls">
+    <div class="left-controls">
+      <label for="notesInput"><small class="small-muted">Paste or edit your notes (paragraphs preserved):</small></label>
+      <textarea id="notesInput" placeholder="Paste long-form notes or multiple paragraphs here..."></textarea>
+      <div style="margin-top:8px;">
+        <button class="primary" onclick="processNotes()">Load / Re-process Notes</button>
+        <button onclick="clearNotes()">Clear</button>
+        <button onclick="exportNotes()">Export (.json)</button>
+        <input type="file" id="importFile" style="display:none" onchange="importNotes(event)">
+        <button onclick="document.getElementById('importFile').click()">Import (.json)</button>
+        <small class="small-muted">Notes persist locally (browser storage).</small>
+      </div>
+    </div>
+
+    <div class="right-controls">
+      <div class="controls-row">
+        <label>Search / Query</label>
+        <input id="queryInput" placeholder="Type a keyword or phrase..." oninput="searchNotes()" style="min-width:220px;padding:8px;border-radius:6px;border:1px solid rgba(102,252,241,0.06);background:#071014;color:#eaf9f9;" />
+        <label>Sort</label>
+        <select id="sortSelect" onchange="renderResults()" title="Sort or choose 'Show Only Matches'">
+          <option value="matchesOnly">Show Only Matches</option>
+          <option value="id">Original Order</option>
+          <option value="deltaI">ΔI (Entropy)</option>
+          <option value="deltaP">ΔP (Predictive)</option>
+          <option value="deltaR">ΔR (Reflection)</option>
+        </select>
+        <label class="toggle"><input type="checkbox" id="contextToggle" checked onchange="renderResults()"> Show context sentences</label>
+      </div>
+      <div style="margin-top:8px;text-align:right;">
+        <div class="legend"><span style="color:var(--cyan)">ΔI</span> &nbsp; <span style="color:#00ff80">ΔP</span> &nbsp; <span style="color:var(--magenta)">ΔR</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="results" aria-live="polite"></div>
+
+  <div class="footer">Built for personal TIT workflows — click a match to open a 3-paragraph context preview.</div>
+</div>
+
+<!-- Modal for expanded context preview -->
+<div id="modalBackdrop" class="modal-backdrop" onclick="closeModal(event)">
+  <div class="modal" role="dialog" aria-modal="true" onclick="event.stopPropagation()">
+    <button class="close" onclick="closeModal()">✖</button>
+    <h3>Context Preview</h3>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<script>
+let paragraphs = [];
+let sentences = [];
+const rawTextKey = 'TIT_raw_text_v1';
+
+function saveRawText(txt){ localStorage.setItem(rawTextKey, txt); }
+function loadRawText(){ return localStorage.getItem(rawTextKey) || ''; }
+function clearNotes(){ if(confirm('Clear notes from this page (local storage) ?')){ paragraphs=[]; sentences=[]; localStorage.removeItem(rawTextKey); document.getElementById('notesInput').value=''; document.getElementById('results').innerHTML=''; } }
+
+function splitIntoSentences(paragraph){
+  const out=[];
+  const regex = /[^.!?]+[.!?]?/g;
+  const matches = paragraph.match(regex);
+  if(matches){ matches.forEach(s=>{ const trimmed = s.trim(); if(trimmed) out.push(trimmed); }); }
+  return out;
+}
+
+function shannonEntropy(text){
+  const tokens = (text.match(/\w+/g) || []).map(t=>t.toLowerCase());
+  const n = tokens.length; if(n===0) return 0;
+  const counts = {}; tokens.forEach(t=>counts[t]=(counts[t]||0)+1);
+  let ent = 0; for(const c of Object.values(counts)){ const p=c/n; ent -= p*Math.log2(p); }
+  return ent;
+}
+
+function processNotes(){
+  const txt = document.getElementById('notesInput').value.trim() || loadRawText();
+  if(!txt){ alert('Please paste or import some notes first.'); return; }
+  saveRawText(txt);
+  paragraphs = txt.split(/
+\s*
+/).map(p=>p.trim()).filter(Boolean);
+  sentences = []; let id=0;
+  paragraphs.forEach((para,pi)=>{
+    const sents = splitIntoSentences(para);
+    sents.forEach((s,si)=>{
+      const deltaI = shannonEntropy(s);
+      const words = (s.match(/\w+/g) || []).length;
+      const unique = new Set((s.match(/\w+/g)||[]).map(t=>t.toLowerCase())).size || 1;
+      const deltaP = words/unique;
+      const deltaR = Math.random()*0.1;
+      sentences.push({id:id++, text:s, paraIndex:pi, sentIndex:si, deltaI, deltaP, deltaR});
+    });
+  });
+  renderResults();
+}
+
+window.addEventListener('DOMContentLoaded',()=>{
+  const saved = loadRawText();
+  if(saved) document.getElementById('notesInput').value = saved;
+  document.getElementById('sortSelect').value='matchesOnly';
+  renderResults();
+});
+
+let lastQuery='';
+function searchNotes(){ lastQuery = document.getElementById('queryInput').value.trim().toLowerCase(); renderResults(); }
+
+function renderResults(){
+  const mode = document.getElementById('sortSelect').value;
+  const showContext = document.getElementById('contextToggle').checked;
+  const resultsDiv = document.getElementById('results');
+  if(mode==='matchesOnly' && (!lastQuery || lastQuery.length===0)){
+    resultsDiv.innerHTML = '<div class="empty-note">Show Only Matches is active — enter a query to display results.</div>'; return;
+  }
+  let toRender = sentences.slice();
+  if(mode==='matchesOnly' || lastQuery){
+    if(lastQuery){
+      toRender = sentences.filter(s => s.text.toLowerCase().includes(lastQuery));
+    } else {
+      toRender = sentences.slice();
+    }
+  }
+  if(mode!=='matchesOnly'){
+    if(mode==='id') toRender.sort((a,b)=>a.id-b.id);
+    else toRender.sort((a,b)=>b[mode]-a[mode]);
+    if(lastQuery) toRender = toRender.filter(s => s.text.toLowerCase().includes(lastQuery));
+  }
+  if(toRender.length===0){ resultsDiv.innerHTML = '<div class="empty-note">No matches found.</div>'; return; }
+  let html='';
+  toRender.forEach(s=>{
+    const prev = sentences.find(x => x.paraIndex===s.paraIndex && x.sentIndex===s.sentIndex-1);
+    const next = sentences.find(x => x.paraIndex===s.paraIndex && x.sentIndex===s.sentIndex+1);
+    const display = lastQuery ? s.text.replace(new RegExp(`(${escapeRegExp(lastQuery)})`,'gi'), '<span class="match-highlight">$1</span>') : s.text;
+    html += `<div class="sentence-card" data-id="${s.id}" onclick="openPreview(${s.paraIndex}, ${s.sentIndex})">`;
+    html += `<div class="sentence-main"><div class="sentence-text"><div class="sentence-id">Para ${s.paraIndex+1} · Sent ${s.sentIndex+1}</div><div>${display}</div>`;
+    if(showContext && prev) html += `<div class="context-sentence">◀ ${prev.text}</div>`;
+    if(showContext && next) html += `<div class="context-sentence">▶ ${next.text}</div>`;
+    html += `</div>`;
+    html += `<div class="metrics"><div style="font-size:0.85rem;color:var(--muted)">ΔI</div><div class="metric-bar deltaI" style="width:${Math.min(s.deltaI*18,100)}%"></div>`;
+    html += `<div style="font-size:0.85rem;color:var(--muted)">ΔP</div><div class="metric-bar deltaP" style="width:${Math.min(s.deltaP*24,100)}%"></div>`;
+    html += `<div style="font-size:0.85rem;color:var(--muted)">ΔR</div><div class="metric-bar deltaR" style="width:${Math.min(s.deltaR*500,100)}%"></div>`;
+    html += `</div></div></div>`;
+  });
+  resultsDiv.innerHTML = html;
+  document.querySelectorAll('.sentence-card').forEach((el,i)=> setTimeout(()=>el.classList.add('show'), 30+i*10));
+}
+
+function escapeRegExp(string){ return string.replace(/[.*+?^${}()|[\]\]/g, '\$&'); }
+
+function openPreview(paraIndex, sentIndex){
+  const backdrop = document.getElementById('modalBackdrop');
+  const content = document.getElementById('modalContent');
+  const paraStart = Math.max(0, paraIndex-1);
+  const paraEnd = Math.min(paragraphs.length-1, paraIndex+1);
+  let html = '';
+  for(let p=paraStart;p<=paraEnd;p++){ html += `<div class="paragraph">${paragraphs[p]}</div>`; }
+  content.innerHTML = html;
+  backdrop.classList.add('show');
+  document.querySelector('.modal').focus();
+}
+
+function closeModal(e){ document.getElementById('modalBackdrop').classList.remove('show'); }
+
+function exportNotes(){ const payload={raw:loadRawText(), paragraphs, sentences}; const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='TIT_notes_export.json'; document.body.appendChild(a); a.click(); setTimeout(()=>{URL.revokeObjectURL(url); a.remove();},500); }
+
+function importNotes(evt){ const f=evt.target.files && evt.target.files[0]; if(!f) return; const reader=new FileReader(); reader.onload=function(ev){ try{ const data=JSON.parse(ev.target.result); if(data.raw) document.getElementById('notesInput').value=data.raw; processNotes(); alert('Imported notes and re-processed.'); }catch(err){ alert('Failed to import: invalid JSON'); } }; reader.readAsText(f); }
+
+document.getElementById('notesInput').addEventListener('keydown', function(e){ if((e.metaKey||e.ctrlKey)&& e.key==='Enter'){ e.preventDefault(); processNotes(); } });
+
+</script>
+</body>
+</html>
