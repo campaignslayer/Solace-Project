@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TIT Interactive Notes</title>
+<style>
+/* --- General Page --- */
+body {
+    font-family: 'Courier New', monospace;
+    background: #0d0d0d;
+    color: #f0f0f0;
+    margin: 20px;
+    line-height: 1.5;
+}
+h1 { 
+    text-align: center; 
+    color: #0ff; 
+    font-weight: 400;
+    text-shadow: 0 0 6px #0ff;
+}
+
+/* --- Inputs --- */
+textarea, input[type=text] {
+    width: 100%;
+    padding: 10px;
+    margin: 5px 0;
+    border: none;
+    border-radius: 5px;
+    font-family: monospace;
+    font-size: 1em;
+}
+textarea {
+    height: 150px;
+    background: #111;
+    color: #f0f0f0;
+}
+button {
+    padding: 10px 15px;
+    background: #0ff;
+    border: none;
+    color: #000;
+    font-weight: bold;
+    cursor: pointer;
+    border-radius: 5px;
+    transition: all 0.2s ease;
+}
+button:hover { background: #0aa; }
+
+/* --- Notes Display --- */
+#results {
+    margin-top: 20px;
+}
+.note {
+    padding: 10px;
+    border-radius: 5px;
+    margin-bottom: 8px;
+    background: #111;
+    display: flex;
+    flex-direction: column;
+    transition: all 0.3s ease;
+}
+.note:hover {
+    background: #1a1a1a;
+}
+.metrics {
+    margin-top: 5px;
+    display: flex;
+    gap: 10px;
+    font-size: 0.9em;
+}
+.deltaI { color: #0ff; }
+.deltaP { color: #f0f; }
+.deltaR { color: #ff0; }
+
+/* --- Context & Expanded View --- */
+.context {
+    font-style: italic;
+    color: #888;
+    margin-left: 10px;
+}
+.expanded {
+    position: fixed;
+    top: 10%;
+    left: 5%;
+    width: 90%;
+    max-height: 80%;
+    overflow-y: auto;
+    background: #111;
+    border: 2px solid #0ff;
+    padding: 15px;
+    z-index: 100;
+    border-radius: 10px;
+    box-shadow: 0 0 20px #0ff;
+}
+.close-btn {
+    display: block;
+    margin-bottom: 10px;
+    background: #f00;
+    color: #fff;
+    padding: 5px 10px;
+    cursor: pointer;
+    width: fit-content;
+    border-radius: 5px;
+}
+
+/* --- Animations --- */
+.note {
+    transform: translateY(0);
+    opacity: 1;
+    transition: all 0.3s ease;
+}
+.note.removed {
+    transform: translateX(-100%);
+    opacity: 0;
+}
+</style>
+</head>
+<body>
+
+<h1>Transactional Information Theory Notes</h1>
+
+<label>Paste your notes here:</label>
+<textarea id="notesInput"></textarea>
+<button onclick="processNotes()">Load Notes</button>
+
+<label>Search / Query:</label>
+<input type="text" id="queryInput" placeholder="Type something to query..." oninput="searchNotes()">
+
+<div id="results"></div>
+
+<!-- Expanded paragraph view -->
+<div id="expandedView" style="display:none;"></div>
+
+<script>
+// Storage for processed notes
+let notesArray = [];
+
+// Tokenization / scoring simulation
+function processNotes() {
+    const text = document.getElementById('notesInput').value;
+    if (!text.trim()) return alert('Please paste some notes!');
+    const lines = text.split(/\n+/);
+    notesArray = lines.map((line, idx) => {
+        const deltaI = line.length * 0.1;
+        const deltaP = line.split(' ').length * 0.05;
+        const deltaR = Math.random() * 0.1;
+        const sentences = line.match(/[^.!?]+[.!?]*/g) || [line];
+        return { id: idx, text: line, deltaI, deltaP, deltaR, sentences };
+    });
+    document.getElementById('results').innerHTML = '<p>Notes loaded! Enter a search to view.</p>';
+}
+
+// Search notes with context
+function searchNotes() {
+    const query = document.getElementById('queryInput').value.toLowerCase();
+    const resultsDiv = document.getElementById('results');
+    if (!query) { resultsDiv.innerHTML = ''; return; }
+
+    let matches = [];
+    notesArray.forEach(note => {
+        note.sentences.forEach((sent, idx) => {
+            if (sent.toLowerCase().includes(query)) {
+                const prev = note.sentences[idx-1] || '';
+                const next = note.sentences[idx+1] || '';
+                matches.push({
+                    text: sent,
+                    contextBefore: prev,
+                    contextAfter: next,
+                    metrics: { deltaI: note.deltaI, deltaP: note.deltaP, deltaR: note.deltaR },
+                    fullNote: note.text
+                });
+            }
+        });
+    });
+
+    if (!matches.length) { resultsDiv.innerHTML = '<p>No matches found.</p>'; return; }
+
+    resultsDiv.innerHTML = matches.map((m, idx) => `
+        <div class="note" onclick="expandNote(${idx})">
+            <div class="context">${m.contextBefore}</div>
+            <div>${m.text}</div>
+            <div class="context">${m.contextAfter}</div>
+            <div class="metrics">
+                <span class="deltaI">ΔI: ${m.metrics.deltaI.toFixed(2)}</span>
+                <span class="deltaP">ΔP: ${m.metrics.deltaP.toFixed(2)}</span>
+                <span class="deltaR">ΔR: ${m.metrics.deltaR.toFixed(2)}</span>
+            </div>
+        </div>
+    `).join('');
+}
+
+// Expand note to show full paragraphs
+function expandNote(idx) {
+    const m = notesArray[idx] || null;
+    if (!m) return;
+    const expanded = document.getElementById('expandedView');
+    expanded.innerHTML = `
+        <div class="expanded">
+            <span class="close-btn" onclick="closeExpanded()">Close</span>
+            <pre>${m.text}</pre>
+        </div>
+    `;
+    expanded.style.display = 'block';
+}
+
+function closeExpanded() {
+    document.getElementById('expandedView').style.display = 'none';
+}
+
+</script>
+
+</body>
+</html>
